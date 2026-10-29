@@ -351,6 +351,9 @@
     const W=pw*scaleAll, H=ph*scaleAll;
     ctx.canvas.width=W; ctx.canvas.height=H;
     ctx.setTransform(1,0,0,1,0,0);
+    // 大图缩小到冲印尺寸时用高质量滤波，避免画质发软
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
     ctx.fillStyle='#fff'; ctx.fillRect(0,0,W,H);
     const line=edgeLine(p);
     const hasEdge=st.edge&&line.trim().length>0;
