@@ -1,0 +1,725 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="照片冲印">
+<title>照片冲印助手</title>
+<style>
+  :root{
+    --bg:#FAF6F0; --surface:#fff; --surface2:#FFF7EE; --text:#443A31;
+    --sub:#97897B; --line:#EEE4D7; --brand:#F07A54; --brand-soft:rgba(240,122,84,.14);
+  }
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{ margin:0; padding:0; background:var(--bg); color:var(--text);
+    font-family:-apple-system,"PingFang SC","HarmonyOS Sans SC","Noto Sans SC",sans-serif;
+    font-size:15px; line-height:1.5; }
+  body{ padding-bottom:env(safe-area-inset-bottom); }
+  button{ font:inherit; color:inherit; cursor:pointer; }
+  [hidden]{ display:none !important; }
+  .page{ padding:16px 16px 28px; max-width:560px; margin:0 auto; }
+  h1{ font-size:21px; margin:6px 0 4px; }
+  .muted{ color:var(--sub); font-size:12.5px; }
+  .card{ background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:12px 14px; }
+  .btn{ display:inline-flex; align-items:center; justify-content:center; gap:6px;
+    border:1px solid var(--line); background:var(--surface); border-radius:13px;
+    height:44px; padding:0 14px; }
+  .btn.primary{ background:var(--brand); border-color:var(--brand); color:#fff; }
+  .btn.big{ width:100%; height:52px; font-size:16px; border-radius:17px; border:none;
+    box-shadow:0 8px 20px rgba(240,122,84,.3); }
+  .seg{ flex:1; min-width:0; height:36px; border-radius:10px; font-size:12.5px; padding:0 2px;
+    white-space:nowrap; }
+  .seg[aria-pressed="true"]{ background:var(--brand); border-color:var(--brand); color:#fff; }
+  .switch{ width:46px; height:27px; border-radius:99px; border:none; background:#E4DACC;
+    position:relative; transition:background .2s; flex:none; }
+  .switch::after{ content:""; position:absolute; top:3px; left:3px; width:21px; height:21px;
+    border-radius:50%; background:#fff; transition:left .2s; }
+  .switch[aria-checked="true"]{ background:var(--brand); }
+  .switch[aria-checked="true"]::after{ left:22px; }
+  .grid{ display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .cell{ background:var(--surface); border:1px solid var(--line); border-radius:14px;
+    padding:7px; position:relative; text-align:left; }
+  .cell canvas{ width:100%; display:block; border-radius:8px; background:#fff; }
+  .tag{ position:absolute; z-index:2; font-size:10.5px; color:#fff; border-radius:99px; padding:1px 7px; }
+  .grid2{ display:grid; grid-template-columns:repeat(3,1fr); gap:4px; }
+  .toast{ position:fixed; left:50%; bottom:100px; transform:translateX(-50%) translateY(10px);
+    background:rgba(43,35,27,.93); color:#FFF6EC; padding:10px 17px; border-radius:99px;
+    font-size:13px; opacity:0; transition:.22s; z-index:99; pointer-events:none;
+    max-width:86%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .toast.on{ opacity:1; transform:translateX(-50%); }
+  .topbar{ display:flex; align-items:center; gap:9px; padding:10px 14px 8px;
+    border-bottom:1px solid var(--line); position:sticky; top:0; background:var(--bg); z-index:5; }
+  .topbar .title{ flex:1; text-align:center; font-weight:600; font-size:15.5px; }
+  .iconbtn{ width:40px; height:40px; border-radius:12px; border:1px solid var(--line);
+    background:var(--surface); display:inline-flex; align-items:center; justify-content:center;
+    font-size:17px; }
+  .field label{ display:block; font-size:12px; color:var(--sub); margin-bottom:5px; }
+  .field input{ width:100%; height:42px; border-radius:11px; border:1px solid var(--line);
+    background:var(--bg); padding:0 12px; font:inherit; font-size:14px; }
+  #editCanvasWrap{ width:100%; background:var(--surface); border-radius:10px; overflow:hidden;
+    box-shadow:0 4px 16px rgba(40,28,16,.14); touch-action:none; }
+  #editCanvasWrap canvas{ width:100%; display:block; }
+  .bar{ position:fixed; left:0; right:0; bottom:0; z-index:6; background:var(--bg);
+    border-top:1px solid var(--line); padding:9px 14px calc(9px + env(safe-area-inset-bottom)); }
+  .bar .inner{ max-width:560px; margin:0 auto; }
+  .progress{ height:8px; border-radius:99px; background:var(--brand-soft); overflow:hidden; }
+  .progress i{ display:block; height:100%; width:0; background:var(--brand); transition:width .25s; }
+</style>
+</head>
+<body>
+
+<!-- 首页 -->
+<section id="pgHome" class="page">
+  <h1>照片冲印助手</h1>
+  <p class="muted" style="margin-top:2px">选照片 · 自动适配 · 打包发客服</p>
+
+  <div class="muted" style="margin:16px 0 8px">冲印尺寸</div>
+  <div class="grid" id="sizeGrid" role="group" aria-label="冲印尺寸"></div>
+
+  <div class="card" style="margin-top:14px; display:flex; align-items:center; gap:10px; padding:10px 14px;">
+    <button class="switch" id="edgeSwitch" role="switch" aria-checked="true" aria-label="注释白边"></button>
+    <div style="flex:1">注释（含拍摄日期）印在照片白边上</div>
+  </div>
+
+  <button class="btn primary big" id="pickBtn" style="margin-top:18px">📷 打开相册，多选照片</button>
+  <input type="file" id="fileInput" accept="image/*" multiple hidden>
+
+  <div class="muted" style="margin:22px 0 8px">我的冲印单</div>
+  <div id="batchList" style="display:flex;flex-direction:column;gap:10px"></div>
+</section>
+
+<!-- 照片清单 -->
+<section id="pgList" hidden>
+  <div class="topbar">
+    <button class="iconbtn" id="listBack" aria-label="返回">‹</button>
+    <div class="title">已选照片</div>
+    <button class="iconbtn" id="listClear" aria-label="清空">🗑</button>
+  </div>
+  <div class="page">
+    <div class="card muted" id="listSummary" style="padding:9px 13px"></div>
+    <div class="grid" id="photoGrid" style="margin-top:10px"></div>
+  </div>
+  <div class="bar"><div class="inner">
+    <button class="btn primary big" id="packBtn">📦 打包成压缩包，发客服打印</button>
+  </div></div>
+</section>
+
+<!-- 编辑 -->
+<section id="pgEdit" hidden>
+  <div class="topbar">
+    <button class="iconbtn" id="editBack" aria-label="返回">‹</button>
+    <div class="title" id="editTitle">#1</div>
+    <button class="iconbtn" id="editCropToggle" aria-label="自由裁剪">✂</button>
+    <button class="iconbtn" id="editNext" aria-label="完成" style="font-size:13px;width:auto;padding:0 14px;">完成</button>
+  </div>
+  <div class="page">
+    <div id="editCanvasWrap"><canvas id="editCanvas"></canvas></div>
+    <div class="muted" id="editHint" style="text-align:center;margin:8px 0 4px"></div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-top:4px">
+      <button class="btn seg" data-fit="crop">自动铺满</button>
+      <button class="btn seg" data-fit="full">完整保留</button>
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center;margin-top:8px;align-items:center">
+      <span class="muted" style="font-size:12.5px">方向</span>
+      <button class="btn seg" data-orient="auto" style="max-width:76px">自动</button>
+      <button class="btn seg" data-orient="portrait" style="max-width:76px">竖版</button>
+      <button class="btn seg" data-orient="landscape" style="max-width:76px">横版</button>
+      <button class="btn seg" id="rotateBtn" style="max-width:86px">↻ 旋转</button>
+    </div>
+    <div class="field" style="margin-top:14px">
+      <label>拍摄时间（自动读取，可修改）</label>
+      <input id="timeInput" maxlength="24" placeholder="如 2026.10.02 14:30">
+    </div>
+    <div class="field" style="margin-top:10px">
+      <label>照片注释（印在白边上，拍摄日期自动加上）</label>
+      <input id="captionInput" maxlength="20" placeholder="如 游乐园的大笑">
+    </div>
+  </div>
+</section>
+
+<!-- 打包 -->
+<section id="pgPack" hidden>
+  <div class="topbar">
+    <button class="iconbtn" id="packBack" aria-label="返回">‹</button>
+    <div class="title">打包发送</div>
+  </div>
+  <div class="page">
+    <div class="card" id="packProgressCard" style="text-align:center;padding:18px 16px">
+      <div id="packPct" style="font-size:28px;font-weight:600">0%</div>
+      <div class="muted" id="packLabel" style="margin-top:4px">准备中…</div>
+      <div class="progress" style="margin-top:14px"><i id="packBar"></i></div>
+    </div>
+    <div class="card" id="packResult" hidden>
+      <div style="display:flex;gap:10px;align-items:center">
+        <div style="width:44px;height:44px;border-radius:12px;background:var(--brand-soft);
+             display:flex;align-items:center;justify-content:center;font-size:22px">📦</div>
+        <div style="flex:1;min-width:0">
+          <div id="packFileName" style="font-weight:600;font-size:14px;word-break:break-all"></div>
+          <div class="muted" id="packFileSub" style="margin-top:2px"></div>
+        </div>
+      </div>
+      <div style="display:flex;gap:10px;margin-top:14px">
+        <button class="btn" id="downloadBtn" style="flex:1">💾 存到本机</button>
+        <button class="btn primary" id="shareBtn" style="flex:1">🛒 发给客服</button>
+      </div>
+      <button class="btn" id="viewBatchBtn" style="width:100%;margin-top:10px;color:var(--brand);border-color:var(--brand-soft)">查看这一单</button>
+    </div>
+  </div>
+</section>
+
+<!-- 历史单 -->
+<section id="pgHistory" hidden>
+  <div class="topbar">
+    <button class="iconbtn" id="historyBack" aria-label="返回">‹</button>
+    <div class="title" id="historyTitle">冲印单</div>
+  </div>
+  <div class="page">
+    <div class="card muted" id="historySummary" style="padding:9px 13px"></div>
+    <div class="grid" id="historyGrid" style="margin-top:10px"></div>
+  </div>
+  <div class="bar"><div class="inner" style="display:flex;gap:10px">
+    <button class="btn" id="historyShare" style="flex:1">🛒 再发一次</button>
+  </div></div>
+</section>
+
+<!-- 起名 / 查重 弹层 -->
+<div id="sheetDim" hidden style="position:fixed;inset:0;background:rgba(25,18,12,.38);z-index:20"></div>
+<div id="sheet" hidden style="position:fixed;left:0;right:0;bottom:0;z-index:21;background:var(--surface);
+     border-radius:22px 22px 0 0;padding:16px 18px calc(18px + env(safe-area-inset-bottom));max-width:560px;margin:0 auto">
+  <div id="sheetBody"></div>
+</div>
+
+<div class="toast" id="toast" role="status"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script>
+(() => {
+  'use strict';
+  const $ = id => document.getElementById(id);
+
+  /* ---------- 常量与状态 ---------- */
+  const SIZES = {
+    c4:{name:'4寸',pw:900,ph:1200,w:3,h:4},
+    c5:{name:'5寸',pw:1050,ph:1500,w:3.5,h:5},
+    c6:{name:'6寸',pw:1200,ph:1800,w:4,h:6},
+    c7:{name:'7寸',pw:1500,ph:2100,w:5,h:7},
+  };
+  const st = {
+    sizeKey:'c6', edge:true,
+    photos:[],            // {id,img(Image),iw,ih,takenAt,fitMode,zoom,offX,offY,orientation,rotation,caption,refId}
+    editIdx:0, cropMode:false, editingBatch:null,
+    batches: JSON.parse(localStorage.getItem('op_batches')||'[]'),
+    lastZip:null,
+  };
+  const size = () => SIZES[st.sizeKey];
+  const saveBatches = () => { try{ localStorage.setItem('op_batches', JSON.stringify(st.batches)); }catch(e){} };
+  try{ const s=JSON.parse(localStorage.getItem('op_settings')||'{}');
+       if(s.sizeKey) st.sizeKey=s.sizeKey; if(s.edge!==undefined) st.edge=s.edge; }catch(e){}
+  const saveSettings = () => localStorage.setItem('op_settings', JSON.stringify({sizeKey:st.sizeKey,edge:st.edge}));
+
+  const uid = () => Math.random().toString(36).slice(2,9);
+  const clamp = (v,a,b)=>Math.max(a,Math.min(b,v));
+  let toastT=null;
+  function toast(m){ const t=$('toast'); t.textContent=m; t.classList.add('on');
+    clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove('on'),2200); }
+
+  function show(id){
+    ['pgHome','pgList','pgEdit','pgPack','pgHistory'].forEach(p=>$(p).hidden=(p!==id));
+    window.scrollTo(0,0);
+  }
+
+  /* ---------- EXIF：拍摄时间（iOS/桌面浏览器均不剥离 EXIF） ---------- */
+  async function exifTakenAt(bytes){
+    try{
+      const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+      if(dv.byteLength<4||dv.getUint16(0)!==0xFFD8) return '';
+      let i=2;
+      while(i+4<dv.byteLength){
+        if(dv.getUint8(i)!==0xFF) break;
+        const marker=dv.getUint8(i+1);
+        if(marker===0xE1 && dv.getUint32(i+4)===0x45786966){ // Exif
+          const tif=i+10; const le = dv.getUint16(tif)===0x4949;
+          const u16=o=>dv.getUint16(o,le), u32=o=>dv.getUint32(o,le);
+          const ifd0=u32(tif+4);
+          const n=u16(ifd0);
+          for(let k=0;k<n;k++){
+            const e=ifd0+2+k*12;
+            if(u16(e)===0x8769){ // EXIF subIFD
+              const sub=u32(e+8); const m=u16(sub);
+              for(let j=0;j<m;j++){
+                const ee=sub+2+j*12;
+                if(u16(ee)===0x9003){ // DateTimeOriginal
+                  const cnt=u32(ee+4);
+                  const vo=(cnt<=4)? ee+8 : tif+u32(ee+8);
+                  let s='';
+                  for(let c=0;c<cnt;c++){ const ch=dv.getUint8(vo+c); if(!ch)break; s+=String.fromCharCode(ch); }
+                  const mm=s.match(/^(\d{4}):(\d{2}):(\d{2})[ T](\d{2}):(\d{2})/);
+                  if(mm) return `${mm[1]}.${mm[2]}.${mm[3]} ${mm[4]}:${mm[5]}`;
+                }
+              }
+            }
+          }
+          return '';
+        }
+        i += 2 + dv.getUint16(i+2);
+      }
+    }catch(e){}
+    return '';
+  }
+
+  /* ---------- 照片导入 ---------- */
+  async function importFiles(files){
+    const added=[];
+    for(const f of files){
+      if(!f.type.startsWith('image/')) continue;
+      const bytes=new Uint8Array(await f.arrayBuffer());
+      const url=URL.createObjectURL(f);
+      const img=new Image();
+      await new Promise((res,rej)=>{ img.onload=res; img.onerror=rej; img.src=url; });
+      // 拍摄时间三级兜底：EXIF → 文件名 → 文件修改时间
+      let fmt = await exifTakenAt(bytes);
+      if(!fmt){
+        const m2 = f.name.match(/(20\d{2})[.\-_ ]?(\d{2})[.\-_ ]?(\d{2})[ _\-]?(\d{2})[.\-_]?(\d{2})/);
+        if(m2) fmt = `${m2[1]}.${m2[2]}.${m2[3]} ${m2[4]}:${m2[5]}`;
+      }
+      if(!fmt && f.lastModified){
+        const t=new Date(f.lastModified), p2=x=>String(x).padStart(2,'0');
+        fmt=`${t.getFullYear()}.${p2(t.getMonth()+1)}.${p2(t.getDate())} ${p2(t.getHours())}:${p2(t.getMinutes())}`;
+      }
+      added.push({
+        id:uid(), img, iw:img.naturalWidth, ih:img.naturalHeight,
+        takenAt:fmt, fitMode:'crop', zoom:1, offX:0, offY:0,
+        orientation:'auto', rotation:0, caption:'',
+        refId:(fmt+'|'+img.naturalWidth+'x'+img.naturalHeight+'|'+f.size),
+      });
+    }
+    if(!added.length){ toast('没有读到照片'); return; }
+    // 本单查重
+    const exist=new Set(st.photos.map(p=>p.refId));
+    const fresh=added.filter(p=>!exist.has(p.refId));
+    const skip=added.length-fresh.length;
+    // 历史查重
+    const printed=new Set();
+    st.batches.forEach(b=>b.photos.forEach(p=>printed.add(p.refId)));
+    const dup=fresh.filter(p=>printed.has(p.refId));
+    let finalPhotos=fresh;
+    if(dup.length){
+      const keep = await askDup(dup.length);
+      if(keep===null) return;
+      if(!keep) finalPhotos=fresh.filter(p=>!dup.includes(p));
+    }
+    if(!finalPhotos.length){ toast(skip?`没有新照片（${skip} 张已在本单）`:'已全部跳过'); return; }
+    st.photos.push(...finalPhotos);
+    toast(`已加入 ${finalPhotos.length} 张`+(skip?`，${skip} 张已在本单跳过`:''));
+    renderList(); show('pgList');
+  }
+  function askDup(n){
+    return new Promise(res=>{
+      $('sheetBody').innerHTML=`
+        <div style="font-weight:600;font-size:16px;margin-bottom:8px">发现重复照片</div>
+        <div class="muted" style="margin-bottom:14px">其中 ${n} 张在之前的冲印单里打印过。再印一次要再花一次钱，也可以跳过它们。</div>
+        <div style="display:flex;gap:10px">
+          <button class="btn" id="dupSkip" style="flex:1">跳过重复的</button>
+          <button class="btn primary" id="dupKeep" style="flex:1">仍然全部加入</button>
+        </div>`;
+      $('sheet').hidden=false; $('sheetDim').hidden=false;
+      const close=v=>{ $('sheet').hidden=true; $('sheetDim').hidden=true; res(v); };
+      $('dupSkip').onclick=()=>close(false);
+      $('dupKeep').onclick=()=>close(true);
+      $('sheetDim').onclick=()=>close(null);
+    });
+  }
+
+  /* ---------- 渲染冲印页（清单/编辑/导出 共用） ---------- */
+  function effLandscape(p){
+    if(p.orientation==='portrait') return false;
+    if(p.orientation==='landscape') return true;
+    const rotOdd=(p.rotation/90|0)%2===1;
+    return (rotOdd? p.ih>p.iw : p.iw>p.ih);
+  }
+  function edgeLine(p){ const d=(p.takenAt||'').split(' ')[0]; return [d,(p.caption||'').trim()].filter(Boolean).join(' · '); }
+
+  // 在给定画布（cssW 物理宽）上绘制一张成品；返回照片区实际高度
+  function drawPrint(ctx, p, cssW, outW, outH){
+    const s=size();
+    const land=effLandscape(p);
+    const pw= land? s.ph: s.pw, ph= land? s.pw: s.ph;
+    // 画布物理尺寸按 cssW 缩放（导出时 cssW=pw 满分辨率）
+    const scaleAll = cssW/pw;
+    const W=pw*scaleAll, H=ph*scaleAll;
+    ctx.canvas.width=W; ctx.canvas.height=H;
+    ctx.setTransform(1,0,0,1,0,0);
+    ctx.fillStyle='#fff'; ctx.fillRect(0,0,W,H);
+    const line=edgeLine(p);
+    const hasEdge=st.edge&&line.trim().length>0;
+    const eH=hasEdge? W*0.105/(1+0.105):0;
+    const photoH=H-eH;
+    // 旋转后有效宽高
+    const rotOdd=(p.rotation/90|0)%2===1;
+    const effW=rotOdd?p.ih:p.iw, effH=rotOdd?p.iw:p.ih;
+    const wide=effW/W>effH/photoH;
+    const contain=wide?W/effW:photoH/effH;
+    const cover=wide?photoH/effH:W/effW;
+    let sc, dx=0, dy=0;
+    if(p.fitMode==='crop') sc=cover;
+    else if(p.fitMode==='custom'){ sc=contain*p.zoom; dx=p.offX*W; dy=p.offY*photoH; }
+    else sc=contain;
+    const dispW=effW*sc, dispH=effH*sc;
+    const fx=(W-dispW)/2+dx, fy=(photoH-dispH)/2+dy;
+    ctx.save();
+    if(p.rotation%360!==0){
+      const cx=fx+dispW/2, cy=fy+dispH/2;
+      ctx.translate(cx,cy); ctx.rotate(p.rotation*Math.PI/180); ctx.translate(-cx,-cy);
+    }
+    if(rotOdd)
+      ctx.drawImage(p.img, fx+(dispW-dispH)/2, fy+(dispH-dispW)/2, dispH, dispW);
+    else
+      ctx.drawImage(p.img, fx, fy, dispW, dispH);
+    ctx.restore();
+    if(hasEdge){
+      const fs=W*0.05;
+      ctx.fillStyle='#C96F45';
+      ctx.font=`600 ${fs}px "Yuanti SC","YouYuan","幼圆","KaiTi","楷体",sans-serif`;
+      ctx.textAlign='center'; ctx.textBaseline='middle';
+      ctx.fillText(line, W/2, photoH+eH/2, W*0.94);
+    }
+    return H;
+  }
+
+  function cellCanvas(p, w){
+    const c=document.createElement('canvas');
+    drawPrint(c.getContext('2d'), p, w);
+    return c;
+  }
+
+  /* ---------- 清单 ---------- */
+  function renderList(){
+    const n=st.photos.length;
+    $('listSummary').innerHTML = n
+      ? `共 <b>${n}</b> 张 · <b>${size().name}</b> · 点照片编辑注释/裁剪/旋转`
+      : '还没有照片';
+    const grid=$('photoGrid'); grid.innerHTML='';
+    st.photos.forEach((p,i)=>{
+      const cell=document.createElement('button'); cell.type='button'; cell.className='cell';
+      const tag=document.createElement('span'); tag.className='tag';
+      tag.style.cssText='top:11px;left:11px;background:rgba(35,28,22,.6)';
+      tag.textContent='#'+(i+1);
+      const del=document.createElement('span'); del.className='tag';
+      del.style.cssText='top:8px;right:8px;background:rgba(35,28,22,.55);width:24px;height:24px;padding:0;display:flex;align-items:center;justify-content:center;border-radius:50%';
+      del.textContent='×';
+      del.onclick=e=>{ e.stopPropagation(); st.photos.splice(i,1); renderList(); toast('已删除'); };
+      cell.appendChild(cellCanvas(p,160));
+      cell.appendChild(tag); cell.appendChild(del);
+      cell.onclick=()=>openEdit(i);
+      grid.appendChild(cell);
+    });
+  }
+
+  /* ---------- 编辑 ---------- */
+  let gStart=null, gPts=new Map();
+  function openEdit(i){
+    st.editIdx=i; st.cropMode=false;
+    $('editCropToggle').textContent='✂';
+    $('editCropToggle').style.background='';
+    show('pgEdit'); syncEditUI(); drawEdit();
+  }
+  function cur(){ return st.photos[st.editIdx]; }
+  function syncEditUI(){
+    const p=cur(); if(!p) return;
+    $('editTitle').textContent=`#${st.editIdx+1} / ${st.photos.length}`;
+    $('captionInput').value=p.caption||'';
+    $('timeInput').value=p.takenAt||'';
+    document.querySelectorAll('[data-fit]').forEach(b=>b.setAttribute('aria-pressed', String(b.dataset.fit===p.fitMode)));
+    document.querySelectorAll('[data-orient]').forEach(b=>b.setAttribute('aria-pressed', String(b.dataset.orient===p.orientation)));
+    $('rotateBtn').style.background = p.rotation%360!==0 ? 'var(--brand-soft)' : '';
+    $('editHint').textContent = st.cropMode
+      ? '裁剪模式：单指拖动、双指缩放；点 ✂ 退出'
+      : `${p.takenAt?('拍摄时间 '+p.takenAt+' · '):''}默认自动铺满；点 ✂ 自由裁剪`;
+  }
+  let editCssW=340;
+  function drawEdit(){
+    const p=cur(); if(!p) return;
+    const wrap=$('editCanvasWrap');
+    editCssW=Math.min(wrap.clientWidth||340, 520);
+    drawPrint($('editCanvas').getContext('2d'), p, editCssW);
+  }
+
+  // 裁剪手势（单指拖 / 双指缩放）
+  const wrap=$('editCanvasWrap');
+  let swipe=null;
+  wrap.addEventListener('pointerdown',e=>{
+    if(!st.cropMode && e.isPrimary) swipe={x:e.clientX,y:e.clientY,t:Date.now()}; else swipe=null;
+  });
+  wrap.addEventListener('pointerup',e=>{
+    if(!swipe) return;
+    const dx=e.clientX-swipe.x, dy=e.clientY-swipe.y; swipe=null;
+    if(Math.abs(dx)>60 && Math.abs(dy)<60 && Date.now()-0>=0){
+      if(dx<0 && st.editIdx<st.photos.length-1){ openEdit(st.editIdx+1); }
+      else if(dx>0 && st.editIdx>0){ openEdit(st.editIdx-1); }
+    }
+  });
+  wrap.addEventListener('pointerdown',e=>{
+    if(!st.cropMode) return;
+    gPts.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    if(gPts.size===1){
+      const p=cur();
+      gStart={zoom:p.zoom, offX:p.offX, offY:p.offY, x:e.clientX, y:e.clientY};
+    } else if(gPts.size===2){
+      const p=cur();
+      const [a,b]=[...gPts.values()];
+      gStart={zoom:p.zoom, offX:p.offX, offY:p.offY,
+              dist:Math.hypot(a.x-b.x,a.y-b.y)};
+    }
+    wrap.setPointerCapture(e.pointerId);
+  });
+  wrap.addEventListener('pointermove',e=>{
+    if(!st.cropMode||!gStart) return;
+    if(gPts.has(e.pointerId)) gPts.set(e.pointerId,{x:e.clientX,y:e.clientY});
+    const p=cur(); p.fitMode='custom';
+    if(gPts.size>=2&&gStart.dist){
+      const [a,b]=[...gPts.values()];
+      const d=Math.hypot(a.x-b.x,a.y-b.y);
+      p.zoom=clamp(gStart.zoom*d/gStart.dist,0.5,4);
+      const mid={x:(a.x+b.x)/2,y:(a.y+b.y)/2};
+      p.offX=clamp(gStart.offX+(mid.x-gStart.midX||0)/editCssW,-0.6,0.6);
+      p.offY=clamp(gStart.offY+(mid.y-gStart.midY||0)/editCssW,-0.6,0.6);
+      if(gStart.midX===undefined){ gStart.midX=mid.x; gStart.midY=mid.y; }
+    } else if(gPts.size===1){
+      p.offX=clamp(gStart.offX+(e.clientX-gStart.x)/editCssW,-0.6,0.6);
+      p.offY=clamp(gStart.offY+(e.clientY-gStart.y)/editCssW,-0.6,0.6);
+    }
+    drawEdit();
+  });
+  ['pointerup','pointercancel'].forEach(ev=>wrap.addEventListener(ev,e=>{
+    gPts.delete(e.pointerId); if(!gPts.size) gStart=null;
+  }));
+
+  $('editCropToggle').onclick=()=>{
+    st.cropMode=!st.cropMode;
+    $('editCropToggle').textContent=st.cropMode?'✓':'✂';
+    $('editCropToggle').style.background=st.cropMode?'var(--brand)':'';
+    $('editCropToggle').style.color=st.cropMode?'#fff':'';
+    syncEditUI();
+  };
+  document.querySelectorAll('[data-fit]').forEach(b=>b.onclick=()=>{
+    const p=cur(); p.fitMode=b.dataset.fit; p.zoom=1; p.offX=0; p.offY=0;
+    syncEditUI(); drawEdit();
+  });
+  document.querySelectorAll('[data-orient]').forEach(b=>b.onclick=()=>{
+    const p=cur(); p.orientation=b.dataset.orient;
+    p.fitMode='crop'; p.zoom=1; p.offX=0; p.offY=0;
+    syncEditUI(); drawEdit();
+  });
+  $('rotateBtn').onclick=()=>{
+    const p=cur(); p.rotation=(p.rotation+90)%360;
+    p.fitMode='crop'; p.zoom=1; p.offX=0; p.offY=0;
+    syncEditUI(); drawEdit();
+  };
+  $('captionInput').addEventListener('input',function(){ cur().caption=this.value; drawEdit(); });
+  $('timeInput').addEventListener('input',function(){ cur().takenAt=this.value; drawEdit(); });
+  $('editNext').onclick=()=>{ renderList(); show('pgList'); };
+  $('editBack').onclick=()=>{ renderList(); show('pgList'); };
+  window.addEventListener('resize',()=>{ if(!$('pgEdit').hidden) drawEdit(); });
+
+  /* ---------- 打包（store 型 zip 由 JSZip 完成） ---------- */
+  function canvasBlob(cv, q){
+    return new Promise(r=>cv.toBlob(b=>r(b),'image/jpeg',q||0.95));
+  }
+  async function doPack(batchName){
+    try{ await doPackInner(batchName); }
+    catch(e){ toast('打包出错，请重试'); $('packLabel').textContent='打包失败：'+e; }
+  }
+  async function doPackInner(batchName){
+    const n=st.photos.length;
+    const zip = window.JSZip ? new JSZip() : null;
+    if(!zip){ toast('打包组件未加载，请检查网络'); return; }
+    const lines=[`冲印尺寸：${size().name}（${size().w}×${size().h} 英寸 @300DPI）`,`数量：${n} 张`,''];
+    const thumbs=[];
+    for(let i=0;i<n;i++){
+      const p=st.photos[i];
+      $('packPct').textContent=Math.round(i/n*95)+'%';
+      $('packLabel').textContent=`正在导出第 ${i+1} / ${n} 张…`;
+      const s=size(); const land=effLandscape(p);
+      const pw=land?s.ph:s.pw;
+      const cv=document.createElement('canvas');
+      drawPrint(cv.getContext('2d'), p, pw);
+      const blob=await canvasBlob(cv);
+      zip.file(String(i+1).padStart(2,'0')+'.jpg', blob);
+      lines.push(`#${i+1}  ${[ (p.takenAt||'').split(' ')[0], p.caption ].filter(Boolean).join(' ')||'（无注释）'}`);
+      thumbs.push({ t: await (async()=>{ const tc=document.createElement('canvas');
+        drawPrint(tc.getContext('2d'), p, 320);
+        return await blobToDataURL(await canvasBlob(tc,0.8)); })(),
+        takenAt:p.takenAt, caption:p.caption, refId:p.refId,
+        fitMode:p.fitMode, zoom:p.zoom, orientation:p.orientation, rotation:p.rotation });
+      await new Promise(r=>setTimeout(r,0));
+    }
+    lines.push('','备注：按清单顺序冲印即可，谢谢！');
+    zip.file('打印说明.txt', lines.join('\n'));
+    $('packPct').textContent='98%'; $('packLabel').textContent='正在打包 zip…';
+    const blob=await zip.generateAsync({type:'blob', compression:'STORE'});
+    st.lastZip={ blob, name:`${batchName}.zip` };
+    $('packPct').textContent='100%'; $('packLabel').textContent='打包完成 ✓';
+    // 存历史
+    const b = st.editingBatch && st.batches.find(x=>x.id===st.editingBatch);
+    const thumbsOnly = thumbs; // 缩略图 dataURL
+    if(b){ Object.assign(b,{name:batchName, date:Date.now(), sizeKey:st.sizeKey, edge:st.edge,
+      count:n, photos:thumbsOnly, zip:(await blobToDataURL(blob))}); }
+    else{
+      const nb={id:'b'+Date.now(), name:batchName, date:Date.now(), sizeKey:st.sizeKey,
+        edge:st.edge, count:n, photos:thumbsOnly, zip:await blobToDataURL(blob)};
+      st.batches.unshift(nb); st.editingBatch=nb.id;
+    }
+    saveBatches(); renderBatches();
+    $('packFileName').textContent=st.lastZip.name;
+    $('packFileSub').textContent=`${n} 张 JPEG + 打印说明.txt`;
+    $('packResult').hidden=false;
+    toast('已存入我的冲印单 ✓');
+  }
+  const blobToDataURL=b=>new Promise(r=>{ const fr=new FileReader(); fr.onload=()=>r(fr.result); fr.readAsDataURL(b); });
+
+  /* ---------- 历史单 ---------- */
+  function fmtStamp(ts){ const d=new Date(ts),p=x=>String(x).padStart(2,'0');
+    return `${d.getMonth()+1}月${d.getDate()}日 ${p(d.getHours())}:${p(d.getMinutes())}`; }
+  function renderBatches(){
+    const list=$('batchList'); list.innerHTML='';
+    if(!st.batches.length){ list.innerHTML='<div class="card muted" style="text-align:center;padding:18px">还没有冲印单</div>'; return; }
+    st.batches.forEach(b=>{
+      const el=document.createElement('button'); el.type='button'; el.className='card';
+      el.style.cssText='display:flex;gap:11px;align-items:center;text-align:left;position:relative;width:100%';
+      el.innerHTML=`<div style="width:42px;height:42px;border-radius:12px;background:var(--brand-soft);
+          display:flex;align-items:center;justify-content:center;font-size:20px;flex:none">📦</div>
+        <div style="flex:1;min-width:0;padding-right:22px">
+          <div style="font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHtml(b.name)}</div>
+          <div class="muted" style="margin-top:2px">${fmtStamp(b.date)} · ${b.count} 张 · ${SIZES[b.sizeKey]?.name||''}</div>
+        </div><span style="position:absolute;right:12px;color:var(--sub)">›</span>`;
+      const del=document.createElement('span'); del.textContent='×';
+      del.style.cssText='position:absolute;top:8px;right:8px;width:24px;height:24px;display:flex;align-items:center;justify-content:center;color:var(--sub);font-size:15px';
+      del.onclick=e=>{ e.stopPropagation();
+        st.batches=st.batches.filter(x=>x!==b); saveBatches(); renderBatches(); toast('已删除'); };
+      el.appendChild(del);
+      el.onclick=()=>openHistory(b);
+      list.appendChild(el);
+    });
+  }
+  const escapeHtml=s=>String(s||'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+  function openHistory(b){
+    $('historyTitle').textContent=b.name;
+    $('historySummary').textContent=`${fmtStamp(b.date)} · ${b.count} 张 · ${SIZES[b.sizeKey]?.name||''}`;
+    const grid=$('historyGrid'); grid.innerHTML='';
+    b.photos.forEach((t,i)=>{
+      const cell=document.createElement('div'); cell.className='cell';
+      cell.innerHTML=`<span class="tag" style="top:11px;left:11px;background:rgba(35,28,22,.6)">#${i+1}</span>
+        <img src="${t.t}" style="width:100%;display:block;border-radius:8px" alt="照片${i+1}">
+        <div class="muted" style="font-size:11px;margin-top:6px;text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${escapeHtml([(t.takenAt||'').split(' ')[0],t.caption].filter(Boolean).join(' ')||'（无注释）')}</div>`;
+      grid.appendChild(cell);
+    });
+    st._historyBatch=b;
+    show('pgHistory');
+  }
+  $('historyBack').onclick=()=>{ renderBatches(); show('pgHome'); };
+  $('historyShare').onclick=async()=>{
+    const b=st._historyBatch; if(!b) return;
+    if(!b.zip){ toast('该单的压缩包已被清理，请重新打包'); return; }
+    const blob=dataURLtoBlob(b.zip);
+    await shareOrDownload(blob, b.name+'.zip');
+  };
+  function dataURLtoBlob(u){
+    const [h,d]=u.split(','); const mime=h.match(/:(.*?);/)[1];
+    const bin=atob(d); const arr=new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++)arr[i]=bin.charCodeAt(i);
+    return new Blob([arr],{type:mime});
+  }
+
+  /* ---------- 下载 / 分享 ---------- */
+  async function shareOrDownload(blob, name){
+    const file=new File([blob],name,{type:'application/zip'});
+    if(navigator.canShare && navigator.canShare({files:[file]})){
+      try{ await navigator.share({files:[file], title:name}); return; }catch(e){ if(e.name==='AbortError') return; }
+    }
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob); a.download=name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(()=>URL.revokeObjectURL(a.href),4000);
+    toast('已开始保存 · 可从分享面板发给客服');
+  }
+  $('shareBtn').onclick=()=>st.lastZip&&shareOrDownload(st.lastZip.blob, st.lastZip.name);
+  $('downloadBtn').onclick=()=>st.lastZip&&shareOrDownload(st.lastZip.blob, st.lastZip.name);
+  $('viewBatchBtn').onclick=()=>{
+    const b=st.batches.find(x=>x.id===st.editingBatch);
+    if(b) openHistory(b);
+  };
+
+  /* ---------- 起名弹窗 ---------- */
+  function askName(){
+    return new Promise(res=>{
+      const cur = st.editingBatch && st.batches.find(x=>x.id===st.editingBatch);
+      const def = cur? cur.name : '';
+      $('sheetBody').innerHTML=`
+        <div style="font-weight:600;font-size:16px;margin-bottom:10px">给这批照片起个名字</div>
+        <input id="nameInput" maxlength="20" value="${escapeHtml(def)}" placeholder="如 宝宝周岁照"
+          style="width:100%;height:44px;border-radius:11px;border:1px solid var(--line);background:var(--bg);padding:0 12px;font:inherit">
+        <div style="display:flex;gap:10px;margin-top:14px">
+          <button class="btn" id="nameCancel" style="flex:1">取消</button>
+          <button class="btn primary" id="nameOk" style="flex:1">打包</button>
+        </div>`;
+      $('sheet').hidden=false; $('sheetDim').hidden=false;
+      const inp=$('nameInput'); inp.focus();
+      const close=v=>{ $('sheet').hidden=true; $('sheetDim').hidden=true; res(v); };
+      $('nameOk').onclick=()=>close(inp.value.trim());
+      $('nameCancel').onclick=()=>close(null);
+      $('sheetDim').onclick=()=>close(null);
+      inp.onkeydown=e=>{ if(e.key==='Enter') close(inp.value.trim()); };
+    });
+  }
+
+  /* ---------- 事件 ---------- */
+  const sizeNames={c4:'4寸',c5:'5寸',c6:'6寸 ★常用',c7:'7寸'};
+  function renderSizes(){
+    const g=$('sizeGrid'); g.innerHTML='';
+    Object.keys(SIZES).forEach(k=>{
+      const s=SIZES[k];
+      const b=document.createElement('button'); b.type='button'; b.className='card';
+      b.style.cssText='display:flex;gap:10px;align-items:center;padding:12px;'+(st.sizeKey===k?'border-color:var(--brand);background:var(--surface2);box-shadow:0 0 0 3px var(--brand-soft)':'');
+      b.innerHTML=`<div style="width:${(s.pw/s.ph*34)|0}px;height:34px;border-radius:3px;flex:none;
+        background:linear-gradient(150deg,#FFE7CF,#FCD3B4);border:1px solid rgba(190,140,100,.35)"></div>
+        <div><div style="font-weight:600;font-size:14px">${sizeNames[k]}</div>
+        <div class="muted" style="font-size:11px">${s.pw}×${s.ph} px</div></div>`;
+      b.onclick=()=>{ st.sizeKey=k; saveSettings(); renderSizes(); toast(`选 ${s.name}`); };
+      g.appendChild(b);
+    });
+  }
+  $('edgeSwitch').onclick=function(){
+    st.edge=!st.edge; this.setAttribute('aria-checked',String(st.edge)); saveSettings();
+  };
+  $('pickBtn').onclick=()=>$('fileInput').click();
+  $('fileInput').onchange=function(){
+    const files=[...this.files]; this.value='';
+    if(files.length) importFiles(files);
+  };
+  $('listBack').onclick=()=>{ renderBatches(); show('pgHome'); };
+  $('listClear').onclick=()=>{ if(!st.photos.length) return;
+    st.photos=[]; st.editingBatch=null; renderList(); toast('已清空，下一包是全新的一单'); };
+  $('packBack').onclick=()=>show('pgList');
+  $('packBtn').onclick=async()=>{
+    if(!st.photos.length){ toast('先添加照片'); return; }
+    const name=await askName();
+    if(name===null) return;
+    if(!name){ toast('请输入名字'); return; }
+    $('packResult').hidden=true; $('packPct').textContent='0%';
+    $('packLabel').textContent='准备中…'; $('packBar') && ($('packBar').style.width='0');
+    show('pgPack');
+    doPack(name||`${size().name}冲印 · ${st.photos.length}张`);
+  };
+
+  /* ---------- 启动 ---------- */
+  renderSizes();
+  $('edgeSwitch').setAttribute('aria-checked',String(st.edge));
+  renderBatches();
+  show('pgHome');
+})();
+</script>
+</body>
+</html>
