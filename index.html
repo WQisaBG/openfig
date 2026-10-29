@@ -275,9 +275,19 @@
     for(const f of files){
       if(!f.type.startsWith('image/')) continue;
       const bytes=new Uint8Array(await f.arrayBuffer());
-      const url=URL.createObjectURL(f);
-      const img=new Image();
-      await new Promise((res,rej)=>{ img.onload=res; img.onerror=rej; img.src=url; });
+      // 关键：用 createImageBitmap 按原始分辨率解码。
+      // 直接用 <img> 解码时，手机浏览器（尤其 iOS）会把大图偷偷降采样
+      // 到约 2000 像素，导出再缩到冲印尺寸会造成二次画质损失。
+      let img, w, h;
+      try {
+        img = await createImageBitmap(f);
+        w = img.width; h = img.height;
+      } catch(e) {
+        const url=URL.createObjectURL(f);
+        img=new Image();
+        await new Promise((res,rej)=>{ img.onload=res; img.onerror=rej; img.src=url; });
+        w=img.naturalWidth; h=img.naturalHeight;
+      }
       // 拍摄时间三级兜底：EXIF → 文件名 → 文件修改时间
       let fmt = await exifTakenAt(bytes);
       if(!fmt){
@@ -289,10 +299,10 @@
         fmt=`${t.getFullYear()}.${p2(t.getMonth()+1)}.${p2(t.getDate())} ${p2(t.getHours())}:${p2(t.getMinutes())}`;
       }
       added.push({
-        id:uid(), img, iw:img.naturalWidth, ih:img.naturalHeight,
+        id:uid(), img, iw:w, ih:h,
         takenAt:fmt, fitMode:'crop', zoom:1, offX:0, offY:0,
         orientation:'auto', rotation:0, caption:'',
-        refId:(fmt+'|'+img.naturalWidth+'x'+img.naturalHeight+'|'+f.size),
+        refId:(fmt+'|'+w+'x'+h+'|'+f.size),
       });
     }
     if(!added.length){ toast('没有读到照片'); return; }
