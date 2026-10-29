@@ -351,6 +351,30 @@
   }
   function edgeLine(p){ const d=(p.takenAt||'').split(' ')[0]; return [d,(p.caption||'').trim()].filter(Boolean).join(' · '); }
 
+  // 高清检测：原图是否达到冲印分辨率（cover 需要缩放比≤1.02）
+  function hdOk(p){
+    const s=size(); const land=effLandscape(p);
+    const tw=land?s.ph:s.pw, th=land?s.pw:s.ph;
+    return Math.max(tw/p.iw, th/p.ih) <= 1.02;
+  }
+
+  // 逐级减半缩放绘制：一次大比例缩小会因滤波质量差而发软，
+  // 分多步（每步≤2倍）缩到接近目标再精绘，是图像处理的标准做法
+  function drawScaled(ctx, img, fx, fy, dw, dh){
+    let src = img;
+    while (src.width > dw * 2 && src.height > dh * 2) {
+      const t = document.createElement('canvas');
+      t.width = Math.max(Math.round(dw), Math.round(src.width / 2));
+      t.height = Math.max(Math.round(dh), Math.round(src.height / 2));
+      const tc = t.getContext('2d');
+      tc.imageSmoothingEnabled = true;
+      tc.imageSmoothingQuality = 'high';
+      tc.drawImage(src, 0, 0, t.width, t.height);
+      src = t;
+    }
+    ctx.drawImage(src, fx, fy, dw, dh);
+  }
+
   // 在给定画布（cssW 物理宽）上绘制一张成品；返回照片区实际高度
   function drawPrint(ctx, p, cssW, outW, outH){
     const s=size();
@@ -387,9 +411,9 @@
       ctx.translate(cx,cy); ctx.rotate(p.rotation*Math.PI/180); ctx.translate(-cx,-cy);
     }
     if(rotOdd)
-      ctx.drawImage(p.img, fx+(dispW-dispH)/2, fy+(dispH-dispW)/2, dispH, dispW);
+      drawScaled(ctx, p.img, fx+(dispW-dispH)/2, fy+(dispH-dispW)/2, dispH, dispW);
     else
-      ctx.drawImage(p.img, fx, fy, dispW, dispH);
+      drawScaled(ctx, p.img, fx, fy, dispW, dispH);
     ctx.restore();
     if(hasEdge){
       const fs=W*0.05;
@@ -410,21 +434,26 @@
   /* ---------- 清单 ---------- */
   function renderList(){
     const n=st.photos.length;
-    $('listSummary').innerHTML = n
-      ? `共 <b>${n}</b> 张 · <b>${size().name}</b> · 点照片编辑注释/裁剪/旋转`
-      : '还没有照片';
+    if (n) {
+      const okN = st.photos.filter(hdOk).length;
+      const hd = okN===n ? ' · 全部高清 ✓' : ` · 高清 ${okN}/${n}${n-okN?' ⚠':''}`;
+      $('listSummary').innerHTML = `共 <b>${n}</b> 张 · <b>${size().name}</b>${hd} · 点照片编辑`;
+    } else $('listSummary').innerHTML = '还没有照片';
     const grid=$('photoGrid'); grid.innerHTML='';
     st.photos.forEach((p,i)=>{
       const cell=document.createElement('button'); cell.type='button'; cell.className='cell';
       const tag=document.createElement('span'); tag.className='tag';
       tag.style.cssText='top:11px;left:11px;background:rgba(35,28,22,.6)';
       tag.textContent='#'+(i+1);
+      const hd=document.createElement('span'); hd.className='tag';
+      hd.style.cssText='left:11px;bottom:11px;background:'+(hdOk(p)?'rgba(62,122,104,.92)':'rgba(201,123,46,.92)');
+      hd.textContent=hdOk(p)?'✓ 高清':'⚠ 原图偏小';
       const del=document.createElement('span'); del.className='tag';
       del.style.cssText='top:8px;right:8px;background:rgba(35,28,22,.55);width:24px;height:24px;padding:0;display:flex;align-items:center;justify-content:center;border-radius:50%';
       del.textContent='×';
       del.onclick=e=>{ e.stopPropagation(); st.photos.splice(i,1); renderList(); toast('已删除'); };
       cell.appendChild(cellCanvas(p,160));
-      cell.appendChild(tag); cell.appendChild(del);
+      cell.appendChild(tag); cell.appendChild(hd); cell.appendChild(del);
       cell.onclick=()=>openEdit(i);
       grid.appendChild(cell);
     });
@@ -449,7 +478,7 @@
     $('rotateBtn').style.background = p.rotation%360!==0 ? 'var(--brand-soft)' : '';
     $('editHint').textContent = st.cropMode
       ? '裁剪模式：单指拖动、双指缩放；点 ✂ 退出'
-      : `${p.takenAt?('拍摄时间 '+p.takenAt+' · '):''}默认自动铺满；点 ✂ 自由裁剪`;
+      : `${hdOk(p)?'✓ 高清':'⚠ 原图偏小（'+p.iw+'×'+p.ih+'），冲印会略糊'}${p.takenAt?' · '+p.takenAt:''} · 点 ✂ 自由裁剪`;
   }
   let editCssW=340;
   function drawEdit(){
@@ -538,7 +567,7 @@
 
   /* ---------- 打包（store 型 zip 由 JSZip 完成） ---------- */
   function canvasBlob(cv, q){
-    return new Promise(r=>cv.toBlob(b=>r(b),'image/jpeg',q||0.95));
+    return new Promise(r=>cv.toBlob(b=>r(b),'image/jpeg',q||0.97));
   }
   async function doPack(batchName){
     try{ await doPackInner(batchName); }
